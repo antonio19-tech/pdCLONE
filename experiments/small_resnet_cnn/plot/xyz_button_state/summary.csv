@@ -1,0 +1,2 @@
+experiment,best_val_accuracy,best_val_f1
+vanilla_cnn_xyz_button_state,0.6424542124542125,0.6800641273361385

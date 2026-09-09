@@ -1,0 +1,167 @@
+experiments:
+  - name: "xy_XCoor_YCoor"
+    image_type: "plot"
+    output_dir: "data/PaHaW/PaHaW_processed/xy_XCoor_YCoor"
+    plot_type: "XY"
+    x_feature: "X_COORDINATE"
+    y_feature: "Y_COORDINATE"
+    z_feature: ~
+
+  - name: "xyz_XCoor_YCoor_altitude"
+    image_type: "plot"
+    output_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_altitude"
+    plot_type: "XY"
+    x_feature: "X_COORDINATE"
+    y_feature: "Y_COORDINATE"
+    z_feature: "ALTITUDE"
+
+  - name: "xyz_XCoor_YCoor_azimuth"
+    image_type: "plot"
+    output_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_azimuth"
+    plot_type: "XY"
+    x_feature: "X_COORDINATE"
+    y_feature: "Y_COORDINATE"
+    z_feature: "AZIMUTH"
+
+  - name: "xyz_XCoor_YCoor_button_state"
+    image_type: "plot"
+    output_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_button_state"
+    plot_type: "XY"
+    x_feature: "X_COORDINATE"
+    y_feature: "Y_COORDINATE"
+    z_feature: "BUTTON_STATE"
+
+  - name: "xyz_XCoor_YCoor_pressure"
+    image_type: "plot"
+    output_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_pressure"
+    plot_type: "XY"
+    x_feature: "X_COORDINATE"
+    y_feature: "Y_COORDINATE"
+    z_feature: "PRESSURE"
+
+  - name: "xyz_XCoor_YCoor_timestamp"
+    image_type: "plot"
+    output_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_timestamp"
+    plot_type: "XY"
+    x_feature: "X_COORDINATE"
+    y_feature: "Y_COORDINATE"
+    z_feature: "TIME_STAMP"
+
+  - name: "gaf_x_coordinate"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_x_coordinate"
+    transform_type: "gaf"
+    series_feature: "X_COORDINATE"
+    image_size: 64
+    method: "summation"
+
+  - name: "gaf_y_coordinate"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_y_coordinate"
+    transform_type: "gaf"
+    series_feature: "Y_COORDINATE"
+    image_size: 64
+    method: "summation"
+
+  - name: "gaf_time_stamp"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_time_stamp"
+    transform_type: "gaf"
+    series_feature: "TIME_STAMP"
+    image_size: 64
+    method: "summation"
+
+  - name: "gaf_button_state"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_button_state"
+    transform_type: "gaf"
+    series_feature: "BUTTON_STATE"
+    image_size: 64
+    method: "summation"
+
+  - name: "gaf_azimuth"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_azimuth"
+    transform_type: "gaf"
+    series_feature: "AZIMUTH"
+    image_size: 64
+    method: "summation"
+
+  - name: "gaf_altitude"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_altitude"
+    transform_type: "gaf"
+    series_feature: "ALTITUDE"
+    image_size: 64
+    method: "summation"
+
+  - name: "gaf_pressure"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/gaf_pressure"
+    transform_type: "gaf"
+    series_feature: "PRESSURE"
+    image_size: 64
+    method: "summation"
+
+  - name: "rp_x_coordinate"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_x_coordinate"
+    transform_type: "recurrence_plot"
+    series_feature: "X_COORDINATE"
+    dimension: 1
+    threshold: "point"
+    percentage: 20
+
+  - name: "rp_y_coordinate"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_y_coordinate"
+    transform_type: "recurrence_plot"
+    series_feature: "Y_COORDINATE"
+    dimension: 1
+    threshold: "point"
+    percentage: 20
+
+  - name: "rp_time_stamp"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_time_stamp"
+    transform_type: "recurrence_plot"
+    series_feature: "TIME_STAMP"
+    dimension: 1
+    threshold: "point"
+    percentage: 20
+
+  - name: "rp_button_state"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_button_state"
+    transform_type: "recurrence_plot"
+    series_feature: "BUTTON_STATE"
+    dimension: 1
+    threshold: "point"
+    percentage: 20
+
+  - name: "rp_azimuth"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_azimuth"
+    transform_type: "recurrence_plot"
+    series_feature: "AZIMUTH"
+    dimension: 1
+    threshold: "point"
+    percentage: 20
+
+  - name: "rp_altitude"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_altitude"
+    transform_type: "recurrence_plot"
+    series_feature: "ALTITUDE"
+    dimension: 1
+    threshold: "point"
+    percentage: 20
+
+  - name: "rp_pressure"
+    image_type: "time_series_transform"
+    output_dir: "data/PaHaW/PaHaW_processed/rp_pressure"
+    transform_type: "recurrence_plot"
+    series_feature: "PRESSURE"
+    dimension: 1
+    threshold: "point"
+    percentage: 20

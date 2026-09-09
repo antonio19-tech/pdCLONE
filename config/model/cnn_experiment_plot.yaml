@@ -1,0 +1,36 @@
+experiments:
+  - name: "vanilla_cnn_xy"
+    processed_dir: "data/PaHaW/PaHaW_processed/xy_XCoor_YCoor"
+    disease_column: "Disease"
+    general_type_of_input: "plot"
+    specific_type_of_input: "xy"
+
+  - name: "vanilla_cnn_xyz_altitude"
+    processed_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_altitude"
+    disease_column: "Disease"
+    general_type_of_input: "plot"
+    specific_type_of_input: "xyz_altitude"
+
+  - name: "vanilla_cnn_xyz_azimuth"
+    processed_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_azimuth"
+    disease_column: "Disease"
+    general_type_of_input: "plot"
+    specific_type_of_input: "xyz_azimuth"
+
+  - name: "vanilla_cnn_xyz_button_state"
+    processed_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_button_state"
+    disease_column: "Disease"
+    general_type_of_input: "plot"
+    specific_type_of_input: "xyz_button_state"
+
+  - name: "vanilla_cnn_xyz_pressure"
+    processed_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_pressure"
+    disease_column: "Disease"
+    general_type_of_input: "plot"
+    specific_type_of_input: "xyz_pressure"
+
+  - name: "vanilla_cnn_xyz_timestamp"
+    processed_dir: "data/PaHaW/PaHaW_processed/xyz_XCoor_YCoor_timestamp"
+    disease_column: "Disease"
+    general_type_of_input: "plot"
+    specific_type_of_input: "xyz_timestamp"

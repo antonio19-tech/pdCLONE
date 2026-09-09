@@ -1,0 +1,4 @@
+csv_file: "data/PaHaW/PaHaW_files/corpus_PaHaW.xlsx"
+base_dir: "data/PaHaW/PaHaW_public"
+filename_regex: "^\\d{5}__\\d+_1\\.svc$"
+seed: 11

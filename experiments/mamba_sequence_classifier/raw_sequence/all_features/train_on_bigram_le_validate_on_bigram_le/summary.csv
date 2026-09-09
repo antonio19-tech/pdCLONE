@@ -1,0 +1,2 @@
+experiment,best_val_accuracy,best_val_f1
+train_on_bigram_le_validate_on_bigram_le,0.6933333333333334,0.6926696832579186

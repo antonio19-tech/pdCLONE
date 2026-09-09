@@ -1,0 +1,21 @@
+# Shared across all experiments
+model:
+  num_classes: 2
+
+training:
+  experiments_root: "experiments"
+  input_size: 128
+  k_folds: 5
+  epochs: 75
+  batch_size: 32
+  learning_rate: 0.001
+  num_workers: 4
+  device: "cuda:0"
+  normalize_images: true
+  stats_batch_size: 64
+  save_metrics: true
+  results_writer: "csv"
+  metrics:
+    - "accuracy"
+    - "f1"
+    

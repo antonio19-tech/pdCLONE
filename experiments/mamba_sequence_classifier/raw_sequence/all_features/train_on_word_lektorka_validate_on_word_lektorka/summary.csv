@@ -1,0 +1,2 @@
+experiment,best_val_accuracy,best_val_f1
+train_on_word_lektorka_validate_on_word_lektorka,0.7619047619047619,0.7411764705882353

@@ -1,0 +1,2 @@
+experiment,best_val_accuracy,best_val_f1
+vanilla_cnn_xyz_azimuth,0.6352472527472528,0.6731415277594409

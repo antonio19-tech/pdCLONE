@@ -1,0 +1,41 @@
+model:
+  num_classes: 2
+  d_model: 64
+  n_layers: 2
+  d_state: 16
+  expand: 2
+  d_conv: 4
+  dropout: 0.2
+
+training:
+  experiments_root: "experiments"
+  k_folds: 5
+  epochs: 60
+  batch_size: 8
+  learning_rate: 0.0005
+  num_workers: 0
+  device: "cuda:1"
+  normalize_sequences: true
+  stats_batch_size: 8
+  log_every_n_batches: 5
+  save_metrics: true
+  results_writer: "csv"
+  metrics:
+    - "accuracy"
+    - "f1"
+
+experiments:
+  - name: "raw_sequence_all_features"
+    general_type_of_input: "raw_sequence"
+    specific_type_of_input: "all_features"
+    disease_column: "Disease"
+    feature_names:
+      - "X_COORDINATE"
+      - "Y_COORDINATE"
+      - "TIME_STAMP"
+      - "BUTTON_STATE"
+      - "AZIMUTH"
+      - "ALTITUDE"
+      - "PRESSURE"
+    downsample_factor: 4
+    max_sequence_length: 1024

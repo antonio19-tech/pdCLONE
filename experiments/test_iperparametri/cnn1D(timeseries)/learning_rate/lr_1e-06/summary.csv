@@ -1,0 +1,2 @@
+experiment,val_loss,val_accuracy,val_f1,val_auc,val_precision,val_recall,val_specificity
+Vanilla_cnn1D,0.6917024749517441,0.5333333333333332,0.3379023646071701,0.5875,0.54,0.4250000000000001,0.6232142857142857

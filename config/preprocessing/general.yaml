@@ -1,0 +1,7 @@
+global:
+  ids_to_exclude:
+    - "00061"
+    - "00080"
+    - "00089"
+  linestyle: " "
+  cmap: "gray"

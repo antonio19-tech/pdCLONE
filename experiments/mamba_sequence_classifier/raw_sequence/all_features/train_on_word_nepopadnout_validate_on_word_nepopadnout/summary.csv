@@ -1,0 +1,2 @@
+experiment,best_val_accuracy,best_val_f1
+train_on_word_nepopadnout_validate_on_word_nepopadnout,0.7761904761904762,0.7726561929119474
