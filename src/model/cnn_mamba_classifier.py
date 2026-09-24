@@ -7,7 +7,7 @@ class CNNMambaClassifier(nn.Module):
     def __init__(
         self,
         segment_input_dim: int,
-        segment_embedding_dim: int = 128,
+        segment_embedding_dim: int = 64,
         num_classes: int = 2,
         mamba_d_model: int = 128,
         mamba_layers: int = 2,

@@ -1,2 +1,0 @@
-experiment,train_loss,val_loss,train_accuracy,val_accuracy,train_f1,val_f1,train_auc,val_auc,train_precision,val_precision,train_recall,val_recall,train_specificity,val_specificity
-Vanilla_cnn1D,0.5189713936710714,0.6014338781281064,0.7209065657835174,0.8,0.7429150103845477,0.7706959706959706,0.7930190313226644,0.875,0.7326599017849819,0.8647619047619047,0.7579821465890432,0.7,0.6809564534602025,0.9

@@ -21,6 +21,7 @@ from src.run.preprocess.run_preprocessing_timeseries import (
     build_timeseries_dataset,
 )
 from src.common.utils import set_determinism
+from src.preprocess.segment.segmenter import aggregate_patient_logits
 from src.run.reporting import build_result_writer
 from src.run.reporting.base_result_writer import BaseResultWriter
 
@@ -259,8 +260,20 @@ class RunSegmentMamba:
         normalization_eps: float = 1e-6,
         seed: int = 42,
         device: str = "cpu",
+        aggregation: str = "mean",
         output_dir: str | Path | None = None,
         training_cfg: dict[str, Any] | None = None,
+
+        # CNN hyperparameters
+        segment_embedding_dim: int = 64,
+
+        # Mamba hyperparameters
+        mamba_d_model: int = 128,
+        mamba_layers: int = 2,
+        mamba_state: int = 16,
+        mamba_expand: int = 2,
+        mamba_conv: int = 4,
+        dropout: float = 0.2,
     ):
         self.data_root = Path(data_root)
         self.metadata_path = Path(metadata_path)
@@ -291,6 +304,7 @@ class RunSegmentMamba:
         self.seed = seed
 
         self.device = torch.device(device)
+        self.aggregation = aggregation
         self.output_dir = Path(output_dir) if output_dir else None
 
         self.patient_ids = [str(p).zfill(5) for p in patient_ids] if patient_ids else None
@@ -321,6 +335,12 @@ class RunSegmentMamba:
                 f"must be one of {valid_monitor_metrics}."
             )
 
+        if self.monitor_metric != "val_loss" and "accuracy" not in self.metric_names:
+            raise ValueError(
+                "'accuracy' must be configured as a metric: it is used as a "
+                "tie-breaker during best epoch selection."
+            )
+
         if self.num_features == 0:
             raise ValueError("At least one base or engineered feature is required.")
 
@@ -328,6 +348,15 @@ class RunSegmentMamba:
             name: build_metric(name) for name in self.metric_names
         }
         self._result_writer: BaseResultWriter | None = build_result_writer(self._training_cfg)
+
+        self.segment_embedding_dim = segment_embedding_dim
+        self.mamba_d_model = mamba_d_model
+        self.mamba_layers = mamba_layers
+        self.mamba_state = mamba_state
+        self.mamba_expand = mamba_expand
+        self.mamba_conv = mamba_conv
+        self.dropout = dropout
+
 
     @property
     def num_features(self) -> int:
@@ -600,6 +629,11 @@ class RunSegmentMamba:
                 )
                 break
 
+        if best_epoch == 0:
+            raise RuntimeError(
+                f"No valid best epoch found for fold {fold}."
+            )
+
         best_payload = history[best_epoch - 1]
 
         fold_payload = {
@@ -621,8 +655,14 @@ class RunSegmentMamba:
 
         model = CNNMambaClassifier(
             segment_input_dim=self.num_features,
-            segment_embedding_dim=128,
+            segment_embedding_dim=self.segment_embedding_dim,
             num_classes=2,
+            mamba_d_model=self.mamba_d_model,
+            mamba_layers=self.mamba_layers,
+            mamba_state=self.mamba_state,
+            mamba_expand=self.mamba_expand,
+            mamba_conv=self.mamba_conv,
+            dropout=self.dropout,
         ).to(self.device)
 
         optimizer = torch.optim.Adam(
@@ -853,12 +893,14 @@ class RunSegmentMamba:
 
         all_logits = []
         all_labels = []
+        all_pids = []
 
         with torch.no_grad():
 
             for batch in loader:
                 sequence = batch["sequence"].to(self.device)
                 labels = batch["label"].to(self.device)
+                pids = batch["patient_id"]
 
                 # [B,T,F] -> [B,1,T,F]
                 segments = sequence.unsqueeze(1)
@@ -899,21 +941,59 @@ class RunSegmentMamba:
                 total_samples += labels.size(0)
 
                 all_logits.append(
-                    logits.detach()
+                    logits.detach().cpu().numpy()
                 )
 
                 all_labels.append(
-                    labels.detach()
+                    labels.detach().cpu().numpy()
                 )
 
-        y_pred = torch.cat(
-            all_logits,
-            dim=0,
+                all_pids.extend(pids)
+
+        if not all_logits:
+            raise ValueError(
+                "No validation samples were processed."
+            )
+
+        # =====================================
+        # AGGREGATE LOGITS PER PATIENT
+        # =====================================
+
+        patient_logits = aggregate_patient_logits(
+            logits=np.concatenate(all_logits, axis=0),
+            patient_ids=all_pids,
+            method=self.aggregation,
         )
 
-        y_true = torch.cat(
+        recording_labels = np.concatenate(
             all_labels,
-            dim=0,
+            axis=0,
+        )
+
+        pid_to_label: dict[str, int] = {}
+
+        for pid, label in zip(all_pids, recording_labels):
+
+            if pid not in pid_to_label:
+                pid_to_label[pid] = int(label)
+
+            elif pid_to_label[pid] != int(label):
+                raise ValueError(
+                    f"Inconsistent labels for patient {pid}"
+                )
+
+        patient_ids_sorted = list(patient_logits.keys())
+
+        y_true = torch.tensor(
+            [pid_to_label[pid] for pid in patient_ids_sorted],
+            dtype=torch.long,
+            device=self.device,
+        )
+
+        y_pred = torch.tensor(
+            np.array([patient_logits[pid] for pid in patient_ids_sorted]),
+            dtype=torch.float32,
+            device=self.device,
         )
 
         results = {}

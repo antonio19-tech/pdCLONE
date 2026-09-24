@@ -1,2 +1,0 @@
-fold,best_epoch,val_loss,train_loss,train_accuracy,train_f1,train_auc,train_precision,train_recall,train_specificity,val_accuracy,val_f1,val_auc,val_precision,val_recall,val_specificity
-5,32,0.7714416459202766,0.4411035852554517,0.8076923076923077,0.8214285714285714,0.8765293849280411,0.8363636363636363,0.8070175438596491,0.8085106382978723,0.5333333333333333,0.0,0.5714285714285714,0.0,0.0,1.0

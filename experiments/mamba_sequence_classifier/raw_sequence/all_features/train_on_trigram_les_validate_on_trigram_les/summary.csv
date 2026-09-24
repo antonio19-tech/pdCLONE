@@ -1,2 +1,0 @@
-experiment,best_val_accuracy,best_val_f1
-train_on_trigram_les_validate_on_trigram_les,0.7361904761904763,0.7413292589763179

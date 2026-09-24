@@ -258,6 +258,17 @@ class RunFullySegmentMamba:
         device: str = "cpu",
         output_dir: str | Path | None = None,
         training_cfg: dict[str, Any] | None = None,
+
+        # CNN hyperparameters
+        segment_embedding_dim: int = 64,
+
+        # Mamba Hyperparameters
+        mamba_d_model: int = 128,
+        mamba_layers: int = 2,
+        mamba_state: int = 16,
+        mamba_expand: int = 2,
+        mamba_conv: int = 4,
+        dropout: float = 0.2,
     ):
         self.data_root = Path(data_root)
         self.metadata_path = Path(metadata_path)
@@ -323,6 +334,15 @@ class RunFullySegmentMamba:
             name: build_metric(name) for name in self.metric_names
         }
         self._result_writer: BaseResultWriter | None = build_result_writer(self._training_cfg)
+
+        self.segment_embedding_dim = segment_embedding_dim
+
+        self.mamba_d_model = mamba_d_model
+        self.mamba_layers = mamba_layers
+        self.mamba_state = mamba_state
+        self.mamba_expand = mamba_expand
+        self.mamba_conv = mamba_conv
+        self.dropout = dropout
 
     @property
     def num_features(self) -> int:
@@ -618,8 +638,14 @@ class RunFullySegmentMamba:
 
         model = CNNMambaClassifier(
             segment_input_dim=self.num_features,
-            segment_embedding_dim=128,
+            segment_embedding_dim=self.segment_embedding_dim,
             num_classes=2,
+            mamba_d_model=self.mamba_d_model,
+            mamba_layers=self.mamba_layers,
+            mamba_state=self.mamba_state,
+            mamba_expand=self.mamba_expand,
+            mamba_conv=self.mamba_conv,
+            dropout=self.dropout,
         ).to(self.device)
 
         optimizer = torch.optim.Adam(
