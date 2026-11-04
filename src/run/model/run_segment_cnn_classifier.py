@@ -105,14 +105,6 @@ class RunSegmentCNN:
 
         self._training_cfg = training_cfg or {}
 
-        self.early_stopping_patience = self._training_cfg.get(
-            "early_stopping_patience", 15
-        )
-
-        self.min_delta = self._training_cfg.get(
-            "min_delta", 1e-4
-        )
-
         self.n_splits = n_splits
         self.include_last = include_last
         self.normalize = normalize
@@ -137,19 +129,6 @@ class RunSegmentCNN:
         )
         if not self.metric_names:
             raise ValueError("At least one metric must be configured.")
-
-        self.monitor_metric = self._training_cfg.get("monitor_metric")
-
-        if self.monitor_metric is None:
-            self.monitor_metric = "auc"
-
-        valid_monitor_metrics = set(self.metric_names) | {"val_loss"}
-
-        if self.monitor_metric not in valid_monitor_metrics:
-            raise ValueError(
-                f"monitor_metric '{self.monitor_metric}' "
-                f"must be one of {valid_monitor_metrics}."
-            )
 
         if self.num_features == 0:
             raise ValueError("At least one base or engineered feature is required.")
@@ -224,15 +203,15 @@ class RunSegmentCNN:
             if self.output_dir is not None:
                 self._save_normalization_stats(fold, normalization_payload)
 
-            fold_payload = self._fit_early_stopping(training_dataset=training_dataset,
-                                                    validation_dataset=validation_dataset,
-                                                    train_patients=train_patients, val_patients=val_patients,
-                                                    fold_label=f"Fold {fold:02d}", fold=fold)
+            fold_payload = self._fit(training_dataset=training_dataset,
+                                     validation_dataset=validation_dataset,
+                                     train_patients=train_patients, val_patients=val_patients,
+                                     fold_label=f"Fold {fold:02d}", fold=fold)
             all_fold_payloads.append(fold_payload)
 
             print(
                 f"Fold {fold:02d} done | "
-                f"best_epoch={fold_payload['best_epoch']} | "
+                f"last_epoch={fold_payload['last_epoch']} | "
                 f"val_loss={fold_payload['val_loss']:.4f} | "
                 f"val_{self.metric_names[0]}={fold_payload.get(f'val_{self.metric_names[0]}', float('nan')):.4f}"
             )
@@ -263,7 +242,7 @@ class RunSegmentCNN:
         )
         return skf.split(patient_ids, labels)
 
-    def _fit_early_stopping(
+    def _fit(
         self,
         training_dataset: Dataset,
         validation_dataset: Dataset,
@@ -287,11 +266,6 @@ class RunSegmentCNN:
         )
         model, optimizer, criterion = self._build_training_components()
 
-        best_monitor_value = np.inf if self.monitor_metric == "val_loss" else -np.inf
-        best_accuracy = -np.inf
-        best_val_loss = np.inf
-        best_epoch = 0
-        patience_counter = 0
         history: list[dict[str, Any]] = []
 
         for epoch in range(1, self.epochs + 1):
@@ -331,82 +305,18 @@ class RunSegmentCNN:
                 validation_scores=val_metrics,
             )
 
-            # =====================================================
-            # SELEZIONE BEST EPOCH
-            # =====================================================
-
-            if self.monitor_metric == "val_loss":
-                current_monitor = val_loss
-                improved = current_monitor < (
-                    best_monitor_value - self.min_delta
-                )
-            else:
-                current_monitor = val_metrics[self.monitor_metric]
-                current_accuracy = val_metrics["accuracy"]
-
-                # AUC maggiore
-                if current_monitor > (
-                    best_monitor_value + self.min_delta
-                ):
-                    improved = True
-
-                # AUC uguale -> accuracy maggiore
-                elif abs(current_monitor - best_monitor_value) <= self.min_delta:
-
-                    if current_accuracy > best_accuracy:
-                        improved = True
-
-                    # AUC e Accuracy uguali -> loss minore
-                    elif abs(current_accuracy - best_accuracy) <= self.min_delta:
-
-                        improved = val_loss < (best_val_loss - self.min_delta)
-
-                    else:
-                        improved = False
-                else:
-                    improved = False
-
-            # Aggiornamento best epoch
-            if improved:
-                best_monitor_value = current_monitor
-
-                if self.monitor_metric != "val_loss":
-                    best_accuracy = val_metrics["accuracy"]
-
-                best_val_loss = val_loss
-                best_epoch = epoch
-                patience_counter = 0
-            else:
-                patience_counter += 1
-
-            # Early Stopping
-            if patience_counter >= self.early_stopping_patience:
-                print(
-                    f"{fold_label} | Early stopping at epoch {epoch:02d} "
-                    f"(best epoch: {best_epoch:02d}, "
-                    f"best {self.monitor_metric}: {best_monitor_value:.4f})"
-                )
-                break
-
-        best_payload = history[best_epoch - 1]
+        # Metriche all'ultima epoca (nessuna selezione della best epoch).
         last_payload = history[-1]
 
         fold_payload = {
             "fold": fold,
 
-            # ----- best epoch -----
-            "best_epoch": best_epoch,
-            "val_loss": best_payload["val_loss"],
-            **{
-                key: value
-                for key, value in best_payload.items()
-                if key.startswith("train_") or key.startswith("val_")
-            },
-
             # ----- last epoch -----
             "last_epoch": last_payload["epoch"],
+            "val_loss": last_payload["val_loss"],
+
             **{
-                f"last_{key}": value
+                key: value
                 for key, value in last_payload.items()
                 if key.startswith("train_") or key.startswith("val_")
             },
@@ -721,29 +631,12 @@ class RunSegmentCNN:
             np.mean([fold["last_epoch"] for fold in all_fold_results])
         )
 
-        averages["last_train_loss"] = float(
-            np.mean([fold["last_train_loss"] for fold in all_fold_results])
-        )
-
-        averages["last_val_loss"] = float(
-            np.mean([fold["last_val_loss"] for fold in all_fold_results])
-        )
-
-        for name in self.metric_names:
-            averages[f"last_train_{name}"] = float(
-                np.mean([fold[f"last_train_{name}"] for fold in all_fold_results])
-            )
-
-            averages[f"last_val_{name}"] = float(
-                np.mean([fold[f"last_val_{name}"] for fold in all_fold_results])
-            )
-
         return {
-            "experiment": "Vanilla_cnn1D",
+            "experiment": "SegmentCnn",
 
             "cross_validation": {
                 "splits": self.n_splits,
-                "early_stopping": self.early_stopping_patience != float("inf"),
+                "early_stopping": False,
             },
 
             "normalize": self.normalize,

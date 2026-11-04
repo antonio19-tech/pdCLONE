@@ -236,8 +236,6 @@ class RunHmmCnnClassifier:
         self.regularization = regularization
 
         self._training_cfg = training_cfg or {}
-        self.early_stopping_patience = self._training_cfg.get("early_stopping_patience", 10)
-        self.min_delta = self._training_cfg.get("min_delta", 1e-4)
 
         self.n_splits = int(n_splits)
 
@@ -262,24 +260,6 @@ class RunHmmCnnClassifier:
         )
         if not self.metric_names:
             raise ValueError("At least one metric must be configured.")
-
-        self.monitor_metric = self._training_cfg.get("monitor_metric")
-
-        if self.monitor_metric is None:
-            self.monitor_metric = "auc"
-
-        valid_monitor_metrics = set(self.metric_names) | {"val_loss"}
-
-        if self.monitor_metric not in valid_monitor_metrics:
-            raise ValueError(
-                f"monitor_metric '{self.monitor_metric}' must be one of {valid_monitor_metrics}."
-            )
-
-        if self.monitor_metric != "val_loss" and "accuracy" not in self.metric_names:
-            raise ValueError(
-                "'accuracy' must be configured as a metric: it is used as a "
-                "tie-breaker during best epoch selection."
-            )
 
         if self.pad_to is None:
             raise ValueError("pad_to must be set.")
@@ -351,7 +331,7 @@ class RunHmmCnnClassifier:
             print(f"Validation patients: {len(val_ids)}")
 
             # =========================================================
-            # HMM FIT (solo pazienti di training)
+            # HMM FIT (solo training set)
             # =========================================================
 
             hmm = HMMTimeSeriesSegmenter(
@@ -392,7 +372,7 @@ class RunHmmCnnClassifier:
 
             print(f"[Fold {fold:02d}] Training CNN model...")
 
-            fold_payload = self._fit_early_stopping(
+            fold_payload = self._fit(
                 training_dataset=train_seg,
                 validation_dataset=val_ds,
                 normalization_payload=normalization_payload,
@@ -404,7 +384,7 @@ class RunHmmCnnClassifier:
 
             print(
                 f"Fold {fold:02d} done | "
-                f"best_epoch={fold_payload['best_epoch']} | "
+                f"last_epoch={fold_payload['last_epoch']} | "
                 f"val_loss={fold_payload['val_loss']:.4f} | "
                 f"val_accuracy={fold_payload['val_accuracy']:.4f}"
             )
@@ -523,7 +503,7 @@ class RunHmmCnnClassifier:
             shuffle=False,
         )
 
-    def _fit_early_stopping(
+    def _fit(
         self,
         training_dataset: Dataset,
         validation_dataset: Dataset,
@@ -544,18 +524,6 @@ class RunHmmCnnClassifier:
         )
 
         model, optimizer, criterion = self._build_training_components()
-
-        best_monitor_value = (
-            np.inf
-            if self.monitor_metric == "val_loss"
-            else -np.inf
-        )
-
-        best_accuracy = -np.inf
-        best_val_loss = np.inf
-
-        best_epoch = 0
-        patience_counter = 0
 
         history: list[dict[str, Any]] = []
 
@@ -606,124 +574,15 @@ class RunHmmCnnClassifier:
                 validation_scores=val_metrics,
             )
 
-            # =====================================================
-            # BEST EPOCH SELECTION
-            # =====================================================
-
-            if self.monitor_metric == "val_loss":
-
-                current_monitor = val_loss
-
-                improved = current_monitor < (
-                    best_monitor_value - self.min_delta
-                )
-
-            else:
-
-                current_monitor = val_metrics[
-                    self.monitor_metric
-                ]
-
-                current_accuracy = val_metrics[
-                    "accuracy"
-                ]
-
-                # -------------------------------------------------
-                # 1. Monitor metric migliore
-                # -------------------------------------------------
-
-                if current_monitor > (
-                    best_monitor_value + self.min_delta
-                ):
-
-                    improved = True
-
-                # -------------------------------------------------
-                # 2. Monitor metric in pareggio
-                #    -> accuracy maggiore
-                # -------------------------------------------------
-
-                elif abs(
-                    current_monitor - best_monitor_value
-                ) <= self.min_delta:
-
-                    if current_accuracy > best_accuracy:
-
-                        improved = True
-
-                    # -------------------------------------------------
-                    # 3. Monitor e accuracy in pareggio
-                    #    -> validation loss minore
-                    # -------------------------------------------------
-
-                    elif abs(
-                        current_accuracy - best_accuracy
-                    ) <= self.min_delta:
-
-                        improved = val_loss < (
-                            best_val_loss - self.min_delta
-                        )
-
-                    else:
-
-                        improved = False
-
-                else:
-
-                    improved = False
-
-            # =====================================================
-            # UPDATE BEST
-            # =====================================================
-
-            if improved:
-
-                best_monitor_value = current_monitor
-
-                if self.monitor_metric != "val_loss":
-                    best_accuracy = val_metrics["accuracy"]
-
-                best_val_loss = val_loss
-                best_epoch = epoch
-
-                patience_counter = 0
-
-            else:
-
-                patience_counter += 1
-
-            if patience_counter >= self.early_stopping_patience:
-                print(
-                    f"{fold_label} | Early stopping at epoch {epoch:02d} "
-                    f"(best epoch: {best_epoch:02d}, "
-                    f"best {self.monitor_metric}: {best_monitor_value:.4f})"
-                )
-                break
-
-        if best_epoch == 0:
-            raise RuntimeError(
-                f"No valid best epoch found for fold {fold}."
-            )
-
-        best_payload = history[best_epoch - 1]
+        # Metriche all'ultima epoca (nessuna selezione della best epoch).
         last_payload = history[-1]
 
         return {
             "fold": fold,
-
-            # ----- best epoch -----
-            "best_epoch": best_epoch,
-            "val_loss": best_payload["val_loss"],
+            "last_epoch": last_payload["epoch"],
+            "val_loss": last_payload["val_loss"],
             **{
                 key: value
-                for key, value in best_payload.items()
-                if key.startswith("train_") or key.startswith("val_")
-            },
-
-            # ----- last epoch -----
-            "last_epoch": last_payload["epoch"],
-            **{
-                f"last_{key}": value
                 for key, value in last_payload.items()
                 if key.startswith("train_") or key.startswith("val_")
             },
@@ -1039,30 +898,13 @@ class RunHmmCnnClassifier:
             np.mean([fold["last_epoch"] for fold in all_fold_results])
         )
 
-        averages["last_train_loss"] = float(
-            np.mean([fold["last_train_loss"] for fold in all_fold_results])
-        )
-
-        averages["last_val_loss"] = float(
-            np.mean([fold["last_val_loss"] for fold in all_fold_results])
-        )
-
-        for name in self.metric_names:
-            averages[f"last_train_{name}"] = float(
-                np.mean([fold[f"last_train_{name}"] for fold in all_fold_results])
-            )
-
-            averages[f"last_val_{name}"] = float(
-                np.mean([fold[f"last_val_{name}"] for fold in all_fold_results])
-            )
-
         return {
-            "experiment": "HMM_CNN",
+            "experiment": "HmmCnn",
 
             "cross_validation": {
                 "splits": self.n_splits,
                 "patient_wise": True,
-                "early_stopping": self.early_stopping_patience != float("inf"),
+                "early_stopping": False,
             },
 
             "representation": {

@@ -71,7 +71,7 @@ class _CaptureMixin:
     """
     Si inserisce prima del runner nella MRO: non modifica l'addestramento,
     ma conserva il modello creato in _build_training_components e,
-    al termine di _fit_early_stopping, il contesto del fold.
+    al termine di _fit, il contesto del fold.
     """
 
     validation_mode = "full"
@@ -108,10 +108,11 @@ class _CaptureMixin:
             validation_mode=self.validation_mode,
             hmm=self._last_hmm,
             hmm_features=self._hmm_columns(),
+            # metriche di validazione all'ultima epoca
             last_metrics={
-                k[len("last_val_"):]: float(v)
+                k[len("val_"):]: float(v)
                 for k, v in payload.items()
-                if k.startswith("last_val_")
+                if k.startswith("val_")
             },
         )
 
@@ -128,8 +129,8 @@ class _HmmCaptureMixin(_CaptureMixin):
     def _hmm_columns(self) -> tuple[str, ...]:
         return tuple(self.hmm_feature_names) + tuple(self.hmm_engineered_features)
 
-    def _fit_early_stopping(self, *args, **kwargs):
-        payload = super()._fit_early_stopping(*args, **kwargs)
+    def _fit(self, *args, **kwargs):
+        payload = super()._fit(*args, **kwargs)
         self._store_context(
             fold=kwargs["fold"],
             payload=payload,
@@ -168,8 +169,8 @@ class CaptureSegmentCNN(_CaptureMixin, RunSegmentCNN):
         super().__init__(*args, **kwargs)
         self._init_capture(stop_after_fold)
 
-    def _fit_early_stopping(self, *args, **kwargs):
-        payload = super()._fit_early_stopping(*args, **kwargs)
+    def _fit(self, *args, **kwargs):
+        payload = super()._fit(*args, **kwargs)
 
         # stesse operazioni eseguite all'interno del runner (nessuna casualità)
         train_ds = kwargs["training_dataset"].subset_by_patients(kwargs["train_patients"])
