@@ -51,7 +51,7 @@ class _NormalizedDataset(Dataset):
         std = self.std.clamp_min(self.eps)
         normalized = (x - self.mean) / std
 
-        # Il padding resta esattamente zero.
+        # Il padding resta esattamente zero
         normalized = normalized * mask.unsqueeze(-1)
 
         sample[self.key] = normalized

@@ -388,7 +388,7 @@ class RunFullySegmentCNN:
             )
 
         # =====================================================
-        # LAST PAYLOAD (nessuna selezione della best epoch)
+        # LAST PAYLOAD
         # =====================================================
 
         last_payload = history[-1]

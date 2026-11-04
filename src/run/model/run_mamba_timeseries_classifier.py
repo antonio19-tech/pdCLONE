@@ -582,7 +582,7 @@ class RunTimeSeriesCNNMamba:
             # LAST EPOCH FOLD RESULT
             # =====================================================
 
-            # Metriche all'ultima epoca (nessuna selezione della best epoch).
+            # Metriche ultima epoca
             last_payload = history[-1]
 
             fold_payload = {
@@ -930,7 +930,7 @@ class RunTimeSeriesCNNMamba:
 
         averages: dict[str, float] = {}
 
-        # ----- chiavi senza prefisso (= ultima epoca) -----
+        # -----  ultima epoca -----
         averages["val_loss"] = float(
             np.mean([fold["val_loss"] for fold in all_fold_results])
         )

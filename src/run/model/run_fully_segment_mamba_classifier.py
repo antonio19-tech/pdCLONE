@@ -490,7 +490,7 @@ class RunFullySegmentMamba:
                 validation_scores=val_metrics,
             )
 
-        # Metriche ultima epoca.
+        # Metriche ultima epoca
         last_payload = history[-1]
 
         fold_payload = {

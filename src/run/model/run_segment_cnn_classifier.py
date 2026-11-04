@@ -305,7 +305,7 @@ class RunSegmentCNN:
                 validation_scores=val_metrics,
             )
 
-        # Metriche all'ultima epoca (nessuna selezione della best epoch).
+        # Metriche ultima epoca
         last_payload = history[-1]
 
         fold_payload = {
