@@ -47,6 +47,8 @@ class HMMSegmentDataset(Dataset):
         label_column: str = "Disease",
         positive_value: str = "PD",
         cache_files: bool = True,
+        hmm_feature_names: Sequence[str] | None = None,
+        hmm_engineered_features: Sequence[str] | None = None,
     ) -> None:
 
         self.hmm_segmenter = hmm_segmenter
@@ -54,8 +56,26 @@ class HMMSegmentDataset(Dataset):
         self.data_root = Path(data_root)
         self.metadata_path = Path(metadata_path)
 
+        # Feature fornite alla CNN (contenuto dei segmenti)
         self.feature_names = tuple(feature_names)
         self.engineered_features = tuple(engineered_features)
+
+        # Feature usate dall'HMM per decodificare gli stati e trovare i confini.
+        # Se entrambi i parametri sono None, l'HMM usa le stesse feature della CNN
+        # (comportamento originale).
+        self._separate_hmm_features = (
+            hmm_feature_names is not None or hmm_engineered_features is not None
+        )
+        if self._separate_hmm_features:
+            self.hmm_feature_names = tuple(hmm_feature_names or ())
+            self.hmm_engineered_features = tuple(hmm_engineered_features or ())
+            if not (self.hmm_feature_names or self.hmm_engineered_features):
+                raise ValueError(
+                    "Le feature dell'HMM non possono essere vuote."
+                )
+        else:
+            self.hmm_feature_names = self.feature_names
+            self.hmm_engineered_features = self.engineered_features
 
         self.pad_to = pad_to
         self.pad_value = pad_value
@@ -64,6 +84,7 @@ class HMMSegmentDataset(Dataset):
 
         self._raw_cache: dict[Path, np.ndarray] = {}
         self._feature_cache: dict[Path, np.ndarray] = {}
+        self._hmm_feature_cache: dict[Path, np.ndarray] = {}
 
         self._samples = []
 
@@ -83,11 +104,24 @@ class HMMSegmentDataset(Dataset):
                 recording.file_path
             )
 
-            chunks = self.hmm_segmenter.segment_sequence(
-                sequence=features,
-                pad_to=self.pad_to,
-                pad_value=self.pad_value,
-            )
+            if self._separate_hmm_features:
+                # Stati/confini calcolati sulle feature dell'HMM,
+                # segmenti tagliati dalle feature della CNN.
+                hmm_features = self._load_hmm_features(
+                    recording.file_path
+                )
+                chunks = self.hmm_segmenter.segment_sequence(
+                    sequence=hmm_features,
+                    pad_to=self.pad_to,
+                    pad_value=self.pad_value,
+                    segment_source=features,
+                )
+            else:
+                chunks = self.hmm_segmenter.segment_sequence(
+                    sequence=features,
+                    pad_to=self.pad_to,
+                    pad_value=self.pad_value,
+                )
 
             for chunk in chunks:
 
@@ -137,6 +171,32 @@ class HMMSegmentDataset(Dataset):
 
         if self.cache_files:
             self._feature_cache[file_path] = features
+
+        return features
+
+    def _load_hmm_features(
+        self,
+        file_path: Path,
+    ) -> np.ndarray:
+        """Feature usate dall'HMM (possono differire da quelle della CNN)."""
+
+        if self.cache_files and file_path in self._hmm_feature_cache:
+            return self._hmm_feature_cache[file_path]
+
+        raw = self._load_raw(file_path)
+
+        feature_columns = (
+            list(self.hmm_feature_names)
+            + list(self.hmm_engineered_features)
+        )
+
+        features = select_features(
+            raw,
+            feature_columns,
+        )
+
+        if self.cache_files:
+            self._hmm_feature_cache[file_path] = features
 
         return features
 
@@ -214,6 +274,10 @@ class HMMSegmentDataset(Dataset):
         subset.feature_names = self.feature_names
         subset.engineered_features = self.engineered_features
 
+        subset._separate_hmm_features = self._separate_hmm_features
+        subset.hmm_feature_names = self.hmm_feature_names
+        subset.hmm_engineered_features = self.hmm_engineered_features
+
         subset.pad_to = self.pad_to
         subset.pad_value = self.pad_value
 
@@ -221,6 +285,7 @@ class HMMSegmentDataset(Dataset):
 
         subset._raw_cache = {}
         subset._feature_cache = {}
+        subset._hmm_feature_cache = {}
 
         subset._samples = [
             sample

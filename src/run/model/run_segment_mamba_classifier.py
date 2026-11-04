@@ -635,15 +635,25 @@ class RunSegmentMamba:
             )
 
         best_payload = history[best_epoch - 1]
+        last_payload = history[-1]
 
         fold_payload = {
             "fold": fold,
+
+            # ----- best epoch -----
             "best_epoch": best_epoch,
             "val_loss": best_payload["val_loss"],
-
             **{
                 key: value
                 for key, value in best_payload.items()
+                if key.startswith("train_") or key.startswith("val_")
+            },
+
+            # ----- last epoch -----
+            "last_epoch": last_payload["epoch"],
+            **{
+                f"last_{key}": value
+                for key, value in last_payload.items()
                 if key.startswith("train_") or key.startswith("val_")
             },
 
@@ -1057,6 +1067,28 @@ class RunSegmentMamba:
                 )
             )
 
+        # ----- last epoch -----
+        averages["last_epoch"] = float(
+            np.mean([fold["last_epoch"] for fold in all_fold_results])
+        )
+
+        averages["last_train_loss"] = float(
+            np.mean([fold["last_train_loss"] for fold in all_fold_results])
+        )
+
+        averages["last_val_loss"] = float(
+            np.mean([fold["last_val_loss"] for fold in all_fold_results])
+        )
+
+        for name in self.metric_names:
+            averages[f"last_train_{name}"] = float(
+                np.mean([fold[f"last_train_{name}"] for fold in all_fold_results])
+            )
+
+            averages[f"last_val_{name}"] = float(
+                np.mean([fold[f"last_val_{name}"] for fold in all_fold_results])
+            )
+            
         return {
             "experiment": "SegmentMamba",
 

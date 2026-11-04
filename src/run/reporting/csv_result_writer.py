@@ -40,6 +40,8 @@ class CsvResultWriter(BaseResultWriter):
         if not rows:
             return
 
+        path.parent.mkdir(parents=True, exist_ok=True)
+
         fieldnames = list(rows[0].keys())
         with path.open("w", newline="", encoding="utf-8") as csv_file:
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)

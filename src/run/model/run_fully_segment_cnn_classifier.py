@@ -159,6 +159,10 @@ class RunFullySegmentCNN:
 
         self.embedding_dim = embedding_dim
         self.dropout = dropout
+        # Storage per Grad-CAM
+        self.trained_models_: dict[int, nn.Module] = {}
+        self.normalization_payloads_: dict[int, dict] = {}
+        self.val_datasets_: dict[int, Dataset] = {}
 
     @property
     def num_features(self) -> int:
@@ -217,6 +221,8 @@ class RunFullySegmentCNN:
             normalization_payload = self._compute_normalization_stats(training_dataset.subset_by_patients(train_patients))
             if self.output_dir is not None:
                 self._save_normalization_stats(fold, normalization_payload)
+
+            self.normalization_payloads_[fold] = normalization_payload
 
             fold_payload = self._fit_with_early_stopping(
                 training_dataset = training_dataset,
@@ -525,28 +531,43 @@ class RunFullySegmentCNN:
                 break
 
         # =====================================================
-        # BEST PAYLOAD
+        # BEST + LAST PAYLOAD
         # =====================================================
 
-        best_payload = history[
-            best_epoch - 1
-            ]
+        if best_epoch == 0:
+            raise RuntimeError(
+                f"No valid best epoch found for fold {fold}."
+            )
+
+        best_payload = history[best_epoch - 1]
+        last_payload = history[-1]
 
         fold_payload = {
             "fold": fold,
+
+            # ----- best epoch -----
             "best_epoch": best_epoch,
             "train_loss": best_payload["train_loss"],
             "val_loss": best_payload["val_loss"],
-
             **{
                 key: value
                 for key, value in best_payload.items()
-                if key.startswith("train_")
-                   or key.startswith("val_")
+                if key.startswith("train_") or key.startswith("val_")
+            },
+
+            # ----- last epoch -----
+            "last_epoch": last_payload["epoch"],
+            **{
+                f"last_{key}": value
+                for key, value in last_payload.items()
+                if key.startswith("train_") or key.startswith("val_")
             },
 
             "history": history,
         }
+
+        self.trained_models_[fold] = model
+        self.val_datasets_[fold] = val_ds  
 
         return fold_payload
 
@@ -780,6 +801,7 @@ class RunFullySegmentCNN:
         """Build summary payload compatible with result writers."""
         averages = {}
 
+        # ----- best epoch -----
         averages["train_loss"] = float(
             np.mean([fold["train_loss"] for fold in all_fold_results])
         )
@@ -790,9 +812,25 @@ class RunFullySegmentCNN:
 
         for name in self.metric_names:
             averages[f"val_{name}"] = float(
-                np.mean(
-                    [fold[f"val_{name}"] for fold in all_fold_results]
-                )
+                np.mean([fold[f"val_{name}"] for fold in all_fold_results])
+            )
+
+        # ----- last epoch -----
+        averages["last_epoch"] = float(
+            np.mean([fold["last_epoch"] for fold in all_fold_results])
+        )
+
+        averages["last_train_loss"] = float(
+            np.mean([fold["last_train_loss"] for fold in all_fold_results])
+        )
+
+        averages["last_val_loss"] = float(
+            np.mean([fold["last_val_loss"] for fold in all_fold_results])
+        )
+
+        for name in self.metric_names:
+            averages[f"last_val_{name}"] = float(
+                np.mean([fold[f"last_val_{name}"] for fold in all_fold_results])
             )
 
         return {
@@ -805,4 +843,3 @@ class RunFullySegmentCNN:
             "folds": all_fold_results,
             "averages": averages,
         }
-

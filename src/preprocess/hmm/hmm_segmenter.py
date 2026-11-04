@@ -244,11 +244,31 @@ class HMMTimeSeriesSegmenter:
         sequence: np.ndarray,
         pad_to: int | None = None,
         pad_value: float = 0.0,
+        segment_source: np.ndarray | None = None,
     ) -> list[SegmentChunk]:
+        """
+        Segmenta una sequenza in base agli stati decodificati dall'HMM.
+
+        Gli stati e i confini vengono calcolati su `sequence` (feature usate
+        dall'HMM). Se `segment_source` è None, anche i segmenti vengono tagliati
+        da `sequence` (comportamento originale). Se `segment_source` è fornito,
+        i segmenti vengono tagliati da quell'array (feature usate dalla CNN):
+        deve avere lo stesso numero di timestep di `sequence`.
+        """
 
         states = self.predict_states(sequence)
         bounds = self.states_to_bounds(states)
-        x = self._as_2d(sequence)
+
+        if segment_source is None:
+            x = self._as_2d(sequence)
+        else:
+            x = self._as_2d(segment_source)
+            n_hmm_steps = len(self._as_2d(sequence))
+            if len(x) != n_hmm_steps:
+                raise ValueError(
+                    "segment_source e sequence devono avere lo stesso numero "
+                    f"di timestep (segment_source={len(x)}, sequence={n_hmm_steps})."
+                )
 
         chunks = []
 

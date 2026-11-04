@@ -200,12 +200,31 @@ class RunHmmCnnMambaClassifier:
         mamba_expand: int = 2,
         mamba_conv: int = 4,
         dropout: float = 0.2,
+
+        # Feature usate SOLO dall'HMM per trovare i confini dei segmenti.
+        # Se entrambi sono None, l'HMM usa le stesse feature della CNN
+        # (comportamento originale). La CNN riceve sempre feature_names +
+        # engineered_features.
+        hmm_feature_names: Sequence[str] | None = None,
+        hmm_engineered_features: Sequence[str] | None = None,
     ):
         self.data_root = Path(data_root)
         self.metadata_path = Path(metadata_path)
 
         self.feature_names = tuple(feature_names) if feature_names is not None else ("y", "x")
         self.engineered_features = tuple(engineered_features)
+
+        self._separate_hmm_features = (
+            hmm_feature_names is not None or hmm_engineered_features is not None
+        )
+        if self._separate_hmm_features:
+            self.hmm_feature_names = tuple(hmm_feature_names or ())
+            self.hmm_engineered_features = tuple(hmm_engineered_features or ())
+            if not (self.hmm_feature_names or self.hmm_engineered_features):
+                raise ValueError("Le feature dell'HMM non possono essere vuote.")
+        else:
+            self.hmm_feature_names = self.feature_names
+            self.hmm_engineered_features = self.engineered_features
 
         self.n_states = n_states
         self.covariance_type = covariance_type
@@ -363,8 +382,8 @@ class RunHmmCnnMambaClassifier:
                     metadata_path=self.metadata_path,
                     patient_ids=train_ids,
                     tasks=self.tasks,
-                    feature_names=self.feature_names,
-                    engineered_features=self.engineered_features,
+                    feature_names=self.hmm_feature_names,
+                    engineered_features=self.hmm_engineered_features,
                     label_column=self.label_column,
                     positive_value=self.positive_value,
                 )
@@ -443,6 +462,12 @@ class RunHmmCnnMambaClassifier:
             tasks=self.tasks,
             feature_names=self.feature_names,
             engineered_features=self.engineered_features,
+            hmm_feature_names=(
+                self.hmm_feature_names if self._separate_hmm_features else None
+            ),
+            hmm_engineered_features=(
+                self.hmm_engineered_features if self._separate_hmm_features else None
+            ),
             pad_to=self.pad_to,
             pad_value=self.pad_value,
             label_column=self.label_column,
@@ -701,15 +726,25 @@ class RunHmmCnnMambaClassifier:
             )
 
         best_payload = history[best_epoch - 1]
+        last_payload = history[-1]
 
         return {
             "fold": fold,
+
+            # ----- best epoch -----
             "best_epoch": best_epoch,
             "val_loss": best_payload["val_loss"],
-
             **{
                 key: value
                 for key, value in best_payload.items()
+                if key.startswith("train_") or key.startswith("val_")
+            },
+
+            # ----- last epoch -----
+            "last_epoch": last_payload["epoch"],
+            **{
+                f"last_{key}": value
+                for key, value in last_payload.items()
                 if key.startswith("train_") or key.startswith("val_")
             },
 
@@ -1049,13 +1084,35 @@ class RunHmmCnnMambaClassifier:
                 np.mean([fold[f"val_{name}"] for fold in all_fold_results])
             )
 
+        # ----- last epoch -----
+        averages["last_epoch"] = float(
+            np.mean([fold["last_epoch"] for fold in all_fold_results])
+        )
+
+        averages["last_train_loss"] = float(
+            np.mean([fold["last_train_loss"] for fold in all_fold_results])
+        )
+
+        averages["last_val_loss"] = float(
+            np.mean([fold["last_val_loss"] for fold in all_fold_results])
+        )
+
+        for name in self.metric_names:
+            averages[f"last_train_{name}"] = float(
+                np.mean([fold[f"last_train_{name}"] for fold in all_fold_results])
+            )
+
+            averages[f"last_val_{name}"] = float(
+                np.mean([fold[f"last_val_{name}"] for fold in all_fold_results])
+            )
+
         return {
             "experiment": "HMM_CNN_Mamba",
 
             "cross_validation": {
                 "splits": self.n_splits,
                 "patient_wise": True,
-                "early_stopping": True,
+                "early_stopping": self.early_stopping_patience != float("inf"),
             },
 
             "representation": {
@@ -1078,6 +1135,12 @@ class RunHmmCnnMambaClassifier:
             "features": {
                 "base": list(self.feature_names),
                 "engineered": list(self.engineered_features),
+            },
+
+            "hmm_features": {
+                "separate_from_cnn": self._separate_hmm_features,
+                "base": list(self.hmm_feature_names),
+                "engineered": list(self.hmm_engineered_features),
             },
 
             "model": {

@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader, Dataset
 from src.metrics import build_metric
 from src.metrics.base_metric import BaseMetric
 
-from src.model.cnn_mamba_timeseries_classifier import (
-    CNNMambaTimeSeriesClassifier,
+from src.model.cnn_mamba_classifier import (
+    CNNMambaClassifier,
 )
 
 from src.run.preprocess.run_preprocessing_timeseries import (
@@ -80,11 +80,18 @@ class RunTimeSeriesCNNMamba:
 
         complete time series
             ↓
-        CNN feature extraction
+        CNN encoder (VanillaCNN1D: conv + adaptive pooling + FC)
             ↓
-        Mamba sequence modelling
+        64-dim embedding of the whole series
+            ↓
+        Mamba on a sequence of ONE element
             ↓
         classification
+
+    Same architecture (CNNMambaClassifier) used by the
+    segment-based steps 4, 5, 8 and 9: here the complete
+    series is treated as a single segment, both in
+    training and in validation.
 
     Training unit:
         complete patient time series
@@ -122,6 +129,7 @@ class RunTimeSeriesCNNMamba:
         mamba_expand: int = 2,
         mamba_conv: int = 4,
         dropout: float = 0.2,
+        segment_embedding_dim: int = 64,
     ) -> None:
 
         self.data_root = Path(data_root)
@@ -244,6 +252,7 @@ class RunTimeSeriesCNNMamba:
         self.mamba_expand = mamba_expand
         self.mamba_conv = mamba_conv
         self.dropout = dropout
+        self.segment_embedding_dim = segment_embedding_dim
 
         # ---------------------------------------------------------
         # METRICS / RESULT WRITER
@@ -524,10 +533,11 @@ class RunTimeSeriesCNNMamba:
 
                     optimizer.zero_grad()
 
-                    # CNN + Mamba
-                    logits = model(
+                    # CNN + Mamba: series as a single segment
+                    logits = self._forward_single_segment(
+                        model,
                         time_series,
-                        mask = mask
+                        mask,
                     )
 
                     loss = criterion(
@@ -750,7 +760,7 @@ class RunTimeSeriesCNNMamba:
                     break
 
             # =====================================================
-            # BEST FOLD RESULT
+            # BEST + LAST FOLD RESULT
             # =====================================================
 
             if best_epoch == 0:
@@ -759,31 +769,33 @@ class RunTimeSeriesCNNMamba:
                     f"for fold {fold}."
                 )
 
-            best_payload = (
-                history[best_epoch - 1]
-            )
+            best_payload = history[best_epoch - 1]
+            last_payload = history[-1]
 
             fold_payload = {
                 "fold": fold,
+
+                # ----- best epoch -----
                 "best_epoch": best_epoch,
-                "val_loss": best_payload[
-                    "val_loss"
-                ],
+                "val_loss": best_payload["val_loss"],
                 **{
                     key: value
-                    for key, value
-                    in best_payload.items()
-                    if (
-                        key.startswith("train_")
-                        or key.startswith("val_")
-                    )
+                    for key, value in best_payload.items()
+                    if key.startswith("train_") or key.startswith("val_")
                 },
+
+                # ----- last epoch -----
+                "last_epoch": last_payload["epoch"],
+                **{
+                    f"last_{key}": value
+                    for key, value in last_payload.items()
+                    if key.startswith("train_") or key.startswith("val_")
+                },
+
                 "history": history,
             }
 
-            all_fold_payloads.append(
-                fold_payload
-            )
+            all_fold_payloads.append(fold_payload)
 
             if (
                 self.output_dir is not None
@@ -793,6 +805,17 @@ class RunTimeSeriesCNNMamba:
                     self.output_dir,
                     fold_payload,
                 )
+
+            print(
+                f"Fold {fold:02d} | "
+                f"best_epoch={best_epoch} "
+                f"val_{self.monitor_metric}="
+                f"{best_payload.get(f'val_{self.monitor_metric}', best_payload['val_loss']):.4f} | "
+                f"last_epoch={last_payload['epoch']} "
+                f"val_{self.monitor_metric}="
+                f"{last_payload.get(f'val_{self.monitor_metric}', last_payload['val_loss']):.4f}"
+            )
+
 
         # =========================================================
         # EXPERIMENT SUMMARY
@@ -819,8 +842,9 @@ class RunTimeSeriesCNNMamba:
 
     def _build_model(self) -> nn.Module:
 
-        model = CNNMambaTimeSeriesClassifier(
-            input_dim=self.num_features,
+        model = CNNMambaClassifier(
+            segment_input_dim=self.num_features,
+            segment_embedding_dim=self.segment_embedding_dim,
             num_classes=2,
             mamba_d_model=self.mamba_d_model,
             mamba_layers=self.mamba_layers,
@@ -831,6 +855,46 @@ class RunTimeSeriesCNNMamba:
         ).to(self.device)
 
         return model
+
+    # ============================================================
+    # FORWARD: COMPLETE SERIES AS A SINGLE SEGMENT
+    # ============================================================
+
+    def _forward_single_segment(
+        self,
+        model: nn.Module,
+        sequence: torch.Tensor,  # [B, T, F]
+        mask: torch.Tensor,  # [B, T]
+    ) -> torch.Tensor:
+        """
+        Feed each complete series to CNNMambaClassifier as a
+        sequence of one segment.
+
+        segment_masks keeps the real length of every series,
+        so the CNN encoder never sees the padding added by
+        pad_timeseries; sequence_mask marks the single element
+        as valid.
+        """
+
+        # [B, T, F] -> [B, 1, T, F]
+        segments = sequence.unsqueeze(1)
+
+        # [B, T] -> [B, 1, T]
+        segment_masks = mask.bool().unsqueeze(1)
+
+        # one valid element per patient
+        sequence_mask = torch.ones(
+            sequence.size(0),
+            1,
+            dtype=torch.bool,
+            device=sequence.device,
+        )
+
+        return model(
+            segments=segments,
+            segment_masks=segment_masks,
+            sequence_mask=sequence_mask,
+        )
 
     # ============================================================
     # PATIENT-WISE SPLIT
@@ -973,10 +1037,11 @@ class RunTimeSeriesCNNMamba:
                     "label"
                 ].to(self.device)
 
-                # CNN + Mamba
-                logits = model(
+                # CNN + Mamba: series as a single segment
+                logits = self._forward_single_segment(
+                    model,
                     sequence,
-                    mask = mask,
+                    mask,
                 )
 
                 loss = criterion(
@@ -1062,29 +1127,28 @@ class RunTimeSeriesCNNMamba:
 
         averages: dict[str, float] = {}
 
+        # ----- best epoch -----
         averages["val_loss"] = float(
-            np.mean(
-                [
-                    fold["val_loss"]
-                    for fold in all_fold_results
-                ]
-            )
+            np.mean([fold["val_loss"] for fold in all_fold_results])
         )
 
         for name in self.metric_names:
+            averages[f"val_{name}"] = float(
+                np.mean([fold[f"val_{name}"] for fold in all_fold_results])
+            )
 
-            averages[
-                f"val_{name}"
-            ] = float(
-                np.mean(
-                    [
-                        fold[
-                            f"val_{name}"
-                        ]
-                        for fold
-                        in all_fold_results
-                    ]
-                )
+        # ----- last epoch -----
+        averages["last_epoch"] = float(
+            np.mean([fold["last_epoch"] for fold in all_fold_results])
+        )
+
+        averages["last_val_loss"] = float(
+            np.mean([fold["last_val_loss"] for fold in all_fold_results])
+        )
+
+        for name in self.metric_names:
+            averages[f"last_val_{name}"] = float(
+                np.mean([fold[f"last_val_{name}"] for fold in all_fold_results])
             )
 
         return {
@@ -1093,7 +1157,7 @@ class RunTimeSeriesCNNMamba:
             "cross_validation": {
                 "splits": self.n_splits,
                 "patient_wise": True,
-                "early_stopping": True,
+                "early_stopping": self.early_stopping_patience != float("inf"),
             },
 
             "normalize": self.normalize,
@@ -1108,7 +1172,9 @@ class RunTimeSeriesCNNMamba:
             },
 
             "model": {
-                "cnn": "VanillaCNN1D feature extractor",
+                "cnn": "VanillaCNN1D encoder (conv + adaptive pooling + FC)",
+                "segment_embedding_dim": self.segment_embedding_dim,
+                "sequence_length": 1,
                 "mamba": {
                     "d_model": self.mamba_d_model,
                     "layers": self.mamba_layers,

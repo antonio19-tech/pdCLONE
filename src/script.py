@@ -35,7 +35,7 @@ DATA_ROOT = _project_path("PaHaW/PaHaW/PaHaW_public")
 METADATA_PATH = _project_path("PaHaW/PaHaW/PaHaW_files/corpus_PaHaW.xlsx")
 
 FEATURE_NAMES = ("y", "x")
-ENGINEERED_FEATURES = ("speed", "pressure_derivative")
+ENGINEERED_FEATURES = ("pressure_derivative",)
 
 N_STATES = 2
 COVARIANCE_TYPE = "diag"
@@ -49,8 +49,8 @@ FIT_PATIENT_IDS = None
 FIT_TASKS = None
 
 # paziente/i su cui generare la spiegazione visiva (None = primi 3 trovati)
-INSPECT_PATIENT_IDS = None    # es. ["00001"]
-INSPECT_TASKS = None          # es. [1]
+INSPECT_PATIENT_IDS = ["00027"]
+INSPECT_TASKS = [1, 8]
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "explainability_out"
 
